@@ -7,20 +7,25 @@ using MiniProjectManager.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- CORS: allow your React dev server (local dev only) ---
+// Read allowed origins from env or fall back to localhost dev URL
+var allowedOriginsEnv = builder.Configuration["AllowedOrigins"];
+var defaultOrigins = "http://localhost:5173";
+var allowedOrigins = string.IsNullOrWhiteSpace(allowedOriginsEnv)
+    ? new[] { defaultOrigins }
+    : allowedOriginsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+// --- CORS ---
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowDevClient", policy =>
+    options.AddPolicy("FrontendPolicy", policy =>
     {
-        policy
-            .WithOrigins("http://localhost:5173") // React/Vite dev server URL — change if different
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+              // .AllowCredentials(); // enable only if you need cookies/authentication via credentials
     });
 
-    // Alternative: open to all origins for quick local testing (uncomment to use)
-    // options.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+    // options.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()); // temp debug
 });
 // ----------------------------------------------------------------
 
@@ -35,7 +40,6 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ISchedulerService, SchedulerService>();
-
 
 var keyString = builder.Configuration["Jwt:Key"] ?? throw new Exception("Jwt:Key missing");
 var key = Encoding.UTF8.GetBytes(keyString);
@@ -76,10 +80,11 @@ if (app.Environment.IsDevelopment())
 }
 
 // Important: enable CORS before authentication so preflight and OPTIONS requests are handled
-app.UseCors("AllowDevClient");
+app.UseCors("FrontendPolicy");
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
 app.Run();
